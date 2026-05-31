@@ -1,5 +1,8 @@
 """
 Иерархия исключений для бизнес-логики EcoCampus.
+
+Все исключения наследуются от EcoCampusError, что позволяет
+перехватывать любую ошибку приложения одним except-блоком.
 """
 
 
@@ -66,6 +69,17 @@ class InvalidWasteTypeError(DataError):
             code="INVALID_WASTE_TYPE",
         )
         self.waste_type = waste_type
+
+
+class ClassificationError(EcoCampusError):
+    """Ошибка классификации типа отходов."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__(
+            message=f"Не удалось определить тип отходов по тексту: {text!r}",
+            code="CLASSIFICATION_ERROR",
+        )
+        self.text = text
 
 
 class ConfigError(EcoCampusError):

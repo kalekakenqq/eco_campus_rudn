@@ -1,5 +1,8 @@
 """
 Доменные модели данных приложения EcoCampus.
+
+Все поля строго типизированы. Модели не зависят от фреймворков —
+их можно использовать в любом слое приложения.
 """
 
 from dataclasses import dataclass, field
@@ -8,7 +11,7 @@ from typing import Optional
 
 
 class WasteType(str, Enum):
-    """Типы отходов, принимаемых в кампусе РУДН."""
+    """Типы отходов, принимаемых в экопунктах кампуса РУДН."""
 
     PLASTIC = "plastic"
     PAPER = "paper"
@@ -20,7 +23,8 @@ class WasteType(str, Enum):
     MIXED = "mixed"
 
     @classmethod
-    def labels(cls) -> dict[str, str]:
+    def labels(cls) -> dict["WasteType", str]:
+        """Возвращает словарь с человекочитаемыми названиями типов."""
         return {
             cls.PLASTIC: "Пластик / ПЭТ-бутылки",
             cls.PAPER: "Бумага / Макулатура",
@@ -33,12 +37,13 @@ class WasteType(str, Enum):
         }
 
     def label(self) -> str:
+        """Возвращает человекочитаемое название типа."""
         return self.labels().get(self, self.value)
 
 
 @dataclass(frozen=True)
 class Coordinates:
-    """Географические координаты точки."""
+    """Географические координаты точки на карте."""
 
     lat: float
     lon: float
@@ -64,12 +69,13 @@ class Container:
     description: str = ""
 
     def accepts(self, waste_type: WasteType) -> bool:
+        """Проверяет, принимает ли контейнер данный тип отходов."""
         return waste_type in self.accepted_types
 
 
 @dataclass
 class RouteStep:
-    """Один шаг маршрута."""
+    """Один шаг навигационного маршрута."""
 
     from_node: str
     to_node: str
@@ -79,7 +85,7 @@ class RouteStep:
 
 @dataclass
 class Route:
-    """Маршрут от текущей позиции до контейнера."""
+    """Маршрут от текущей позиции пользователя до контейнера."""
 
     target_container: Container
     waste_type: WasteType
@@ -88,11 +94,12 @@ class Route:
     estimated_minutes: float = 0.0
 
     def summary(self) -> str:
-        distance = (
-            f"{self.total_distance_meters:.0f} м"
-            if self.total_distance_meters < 1000
-            else f"{self.total_distance_meters / 1000:.1f} км"
-        )
+        """Возвращает краткое текстовое описание маршрута."""
+        if self.total_distance_meters < 1000:
+            distance = f"{self.total_distance_meters:.0f} м"
+        else:
+            distance = f"{self.total_distance_meters / 1000:.1f} км"
+
         return (
             f"Контейнер: {self.target_container.name}\n"
             f"Принимает: {self.waste_type.label()}\n"
@@ -109,3 +116,16 @@ class UserLocation:
     node_id: str
     display_name: str
     coordinates: Optional[Coordinates] = None
+
+
+@dataclass
+class ClassificationResult:
+    """Результат классификации отходов по текстовому описанию."""
+
+    waste_type: WasteType
+    confidence: float
+    matched_keywords: list[str]
+
+    def is_confident(self, threshold: float = 0.5) -> bool:
+        """Возвращает True, если уверенность классификации выше порога."""
+        return self.confidence >= threshold
