@@ -1,6 +1,6 @@
 """
 Движок маршрутизации по кампусу РУДН.
-Использует алгоритм Дейкстры (через NetworkX) для поиска кратчайшего пути.
+Использует алгоритм Дейкстры через NetworkX.
 """
 
 import networkx as nx
@@ -16,13 +16,12 @@ from eco_campus.data.campus_data import CAMPUS_EDGES, CAMPUS_NODES, CONTAINERS
 
 logger = setup_logger(__name__)
 
-# Средняя скорость пешехода, м/мин
 WALKING_SPEED_M_PER_MIN: float = 80.0
 
 
 class CampusRouter:
     """
-    Основной сервис маршрутизации по экопунктам кампуса.
+    Сервис маршрутизации по экопунктам кампуса.
 
     Строит взвешенный граф кампуса и находит оптимальный маршрут
     от текущей позиции пользователя до ближайшего подходящего контейнера.
@@ -33,23 +32,20 @@ class CampusRouter:
         self._containers: list[Container] = CONTAINERS
         self._nodes: dict[str, dict] = CAMPUS_NODES
         self._build_graph()
-        logger.info("CampusRouter инициализирован: %d узлов, %d рёбер, %d контейнеров",
-                    self._graph.number_of_nodes(),
-                    self._graph.number_of_edges(),
-                    len(self._containers))
+        logger.info(
+            "CampusRouter инициализирован: %d узлов, %d рёбер, %d контейнеров",
+            self._graph.number_of_nodes(),
+            self._graph.number_of_edges(),
+            len(self._containers),
+        )
 
     def _build_graph(self) -> None:
-        """Строит граф кампуса из узлов и рёбер."""
         for node_id, data in self._nodes.items():
             self._graph.add_node(node_id, **data)
-
         for u, v, weight in CAMPUS_EDGES:
             self._graph.add_edge(u, v, weight=weight)
 
-        logger.debug("Граф кампуса построен")
-
     def get_locations(self) -> list[UserLocation]:
-        """Возвращает список всех доступных локаций для выбора."""
         return [
             UserLocation(
                 node_id=node_id,
@@ -60,34 +56,13 @@ class CampusRouter:
         ]
 
     def find_containers(self, waste_type: WasteType) -> list[Container]:
-        """
-        Возвращает все активные контейнеры, принимающие данный тип отходов.
-
-        Args:
-            waste_type: Тип отходов.
-
-        Returns:
-            Список подходящих контейнеров.
-
-        Raises:
-            ContainerNotFoundError: Если ни одного контейнера не найдено.
-        """
-        results = [
-            c for c in self._containers
-            if c.is_active and c.accepts(waste_type)
-        ]
+        results = [c for c in self._containers if c.is_active and c.accepts(waste_type)]
         if not results:
             logger.warning("Контейнеры для '%s' не найдены", waste_type.value)
             raise ContainerNotFoundError(waste_type.label())
-
-        logger.debug("Найдено %d контейнеров для '%s'", len(results), waste_type.value)
         return results
 
-    def find_nearest_route(
-        self,
-        from_location: str,
-        waste_type: WasteType,
-    ) -> Route:
+    def find_nearest_route(self, from_location: str, waste_type: WasteType) -> Route:
         """
         Находит маршрут до ближайшего контейнера нужного типа.
 
@@ -97,14 +72,8 @@ class CampusRouter:
 
         Returns:
             Объект Route с шагами и расстоянием.
-
-        Raises:
-            LocationNotFoundError: Если стартовая точка не найдена.
-            ContainerNotFoundError: Если нет контейнеров для данного типа.
-            NoRouteError: Если маршрут недостижим.
         """
         if from_location not in self._graph:
-            logger.error("Неизвестная локация: %s", from_location)
             raise LocationNotFoundError(from_location)
 
         candidates = self.find_containers(waste_type)
@@ -114,11 +83,13 @@ class CampusRouter:
 
         for container in candidates:
             target_node = container.location_name
-
             if target_node not in self._graph:
-                logger.warning("Контейнер '%s' указывает на несуществующий узел '%s'",
-                               container.container_id, target_node)
-                continue  # Graceful degradation — пропускаем битую запись
+                logger.warning(
+                    "Контейнер '%s' указывает на несуществующий узел '%s'",
+                    container.container_id,
+                    target_node,
+                )
+                continue
 
             try:
                 path: list[str] = nx.dijkstra_path(
@@ -128,7 +99,6 @@ class CampusRouter:
                     self._graph, from_location, target_node, weight="weight"
                 )
             except nx.NetworkXNoPath:
-                logger.debug("Нет пути от '%s' до '%s'", from_location, target_node)
                 continue
             except nx.NodeNotFound as exc:
                 logger.warning("Узел не найден при маршрутизации: %s", exc)
@@ -149,7 +119,7 @@ class CampusRouter:
             raise NoRouteError(from_location, waste_type.value)
 
         logger.info(
-            "Маршрут найден: %s → %s (%.0f м)",
+            "Маршрут найден: %s -> %s (%.0f м)",
             from_location,
             best_route.target_container.name,
             best_route.total_distance_meters,
@@ -157,7 +127,6 @@ class CampusRouter:
         return best_route
 
     def _build_steps(self, path: list[str]) -> list[RouteStep]:
-        """Преобразует список узлов пути в читаемые шаги маршрута."""
         steps: list[RouteStep] = []
         for i in range(len(path) - 1):
             u, v = path[i], path[i + 1]
@@ -168,10 +137,9 @@ class CampusRouter:
                 from_node=u,
                 to_node=v,
                 distance_meters=distance,
-                instruction=f"Идите от «{from_name}» к «{to_name}» (~{distance:.0f} м)",
+                instruction=f"Идите от '{from_name}' к '{to_name}' (около {distance:.0f} м)",
             ))
         return steps
 
     def all_containers(self) -> list[Container]:
-        """Возвращает все контейнеры кампуса."""
         return list(self._containers)

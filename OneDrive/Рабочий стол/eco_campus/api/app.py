@@ -29,12 +29,10 @@ from eco_campus.core.router import CampusRouter
 logger = setup_logger(__name__)
 
 _router: CampusRouter | None = None
-
 STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _open_browser() -> None:
-    """Открывает браузер через 1.5 сек после старта сервера."""
     time.sleep(1.5)
     webbrowser.open("http://127.0.0.1:8000")
 
@@ -45,14 +43,13 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     logger.info("Запуск EcoCampus API...")
     _router = CampusRouter()
     logger.info("API готов к работе")
-    # Автооткрытие браузера в фоне
     threading.Thread(target=_open_browser, daemon=True).start()
     yield
     logger.info("Завершение работы API")
 
 
 app = FastAPI(
-    title="EcoCampus РУДН — Эко-логистика",
+    title="EcoCampus РУДН",
     description="Интеллектуальная навигация по экопунктам кампуса РУДН",
     version="1.0.0",
     lifespan=lifespan,
@@ -65,14 +62,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Раздача статических файлов (UI)
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-
-# ---------------------------------------------------------------------------
-# Схемы ответов
-# ---------------------------------------------------------------------------
 
 class ContainerOut(BaseModel):
     container_id: str
@@ -108,10 +100,6 @@ class LocationOut(BaseModel):
     lon: float | None
 
 
-# ---------------------------------------------------------------------------
-# Вспомогательные функции
-# ---------------------------------------------------------------------------
-
 def _get_router() -> CampusRouter:
     if _router is None:
         raise HTTPException(status_code=503, detail="Сервис маршрутизации не готов")
@@ -131,34 +119,24 @@ def _container_to_out(c: Any) -> ContainerOut:
     )
 
 
-# ---------------------------------------------------------------------------
-# Эндпоинты
-# ---------------------------------------------------------------------------
-
 @app.get("/", include_in_schema=False)
 def root() -> FileResponse:
-    """Отдаёт главную страницу UI."""
-    index = STATIC_DIR / "index.html"
-    if index.exists():
-        return FileResponse(str(index))
-    return FileResponse(str(index))  # type: ignore
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 
 @app.get("/api", tags=["info"])
 def api_info() -> dict[str, str]:
     return {
         "service": "EcoCampus РУДН",
-        "description": "Эко-логистика кампуса: навигация к контейнерам для раздельного сбора",
+        "version": "1.0.0",
         "docs": "/docs",
-        "ui": "/",
     }
 
 
 @app.get("/locations", response_model=list[LocationOut], tags=["navigation"])
 def get_locations() -> list[LocationOut]:
-    """Возвращает все доступные точки кампуса."""
+    """Все доступные точки кампуса."""
     campus_router = _get_router()
-    locations = campus_router.get_locations()
     return [
         LocationOut(
             node_id=loc.node_id,
@@ -166,24 +144,21 @@ def get_locations() -> list[LocationOut]:
             lat=loc.coordinates.lat if loc.coordinates else None,
             lon=loc.coordinates.lon if loc.coordinates else None,
         )
-        for loc in locations
+        for loc in campus_router.get_locations()
     ]
 
 
 @app.get("/waste-types", tags=["info"])
 def get_waste_types() -> list[dict[str, str]]:
-    """Возвращает все поддерживаемые типы отходов."""
-    return [
-        {"value": wt.value, "label": wt.label()}
-        for wt in WasteType
-    ]
+    """Все поддерживаемые типы отходов."""
+    return [{"value": wt.value, "label": wt.label()} for wt in WasteType]
 
 
 @app.get("/containers", response_model=list[ContainerOut], tags=["containers"])
 def get_containers(
     waste_type: str | None = Query(default=None, description="Фильтр по типу отходов"),
 ) -> list[ContainerOut]:
-    """Возвращает все контейнеры, опционально фильтруя по типу отходов."""
+    """Все контейнеры с опциональной фильтрацией по типу отходов."""
     campus_router = _get_router()
     try:
         if waste_type:
@@ -223,6 +198,7 @@ def get_route(
     except EcoCampusError as exc:
         logger.exception("Неожиданная ошибка маршрутизации")
         raise HTTPException(status_code=500, detail=exc.message) from exc
+
     return RouteOut(
         container=_container_to_out(route.target_container),
         waste_type=route.waste_type.label(),

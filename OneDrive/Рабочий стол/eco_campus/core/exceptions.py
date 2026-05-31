@@ -1,5 +1,5 @@
 """
-Кастомная иерархия исключений для бизнес-логики EcoCampus.
+Иерархия исключений для бизнес-логики EcoCampus.
 """
 
 
@@ -14,8 +14,6 @@ class EcoCampusError(Exception):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(code={self.code!r}, message={self.message!r})"
 
-
-# --- Исключения маршрутизации ---
 
 class RoutingError(EcoCampusError):
     """Ошибки при построении маршрута."""
@@ -44,8 +42,6 @@ class NoRouteError(RoutingError):
         self.target = target
 
 
-# --- Исключения данных ---
-
 class DataError(EcoCampusError):
     """Ошибки при работе с данными."""
 
@@ -71,8 +67,6 @@ class InvalidWasteTypeError(DataError):
         )
         self.waste_type = waste_type
 
-
-# --- Исключения конфигурации ---
 
 class ConfigError(EcoCampusError):
     """Ошибки конфигурации приложения."""
